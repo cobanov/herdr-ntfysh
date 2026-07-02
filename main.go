@@ -23,13 +23,14 @@ import (
 	"os"
 
 	"github.com/cobanov/herdr-ntfysh/internal/config"
+	"github.com/cobanov/herdr-ntfysh/internal/decide"
 	"github.com/cobanov/herdr-ntfysh/internal/dedup"
 	"github.com/cobanov/herdr-ntfysh/internal/event"
 	"github.com/cobanov/herdr-ntfysh/internal/ntfy"
 	"github.com/cobanov/herdr-ntfysh/internal/render"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 // logf writes a diagnostic line to stderr. herdr captures plugin stderr and
 // exposes it via `herdr plugin log list --plugin cobanov.herdr-ntfysh`.
@@ -103,25 +104,38 @@ func run() int {
 		logf("event carried no agent status, skipping")
 		return 0
 	}
-	if !cfg.NotifyOn[status] {
-		// A status we are not configured to announce; silent success.
-		return 0
-	}
 
-	// Debounce duplicate emissions of the same status for the same pane so a
-	// flapping agent (or a re-emitted event) cannot spam the user.
+	// State persists across invocations: it lets us tell a working->idle
+	// "done" apart from a plain idle, and debounce repeat notifications.
 	store := dedup.Open(cfg)
-	if !store.ShouldNotify(ev.PaneKey(), status) {
-		logf("debounced duplicate %q for %s", status, ev.PaneKey())
+	key := ev.PaneKey()
+	prev := store.Prev(key)
+
+	// herdr never emits a "done" status; decide derives it from the
+	// prev->cur transition. Record the sighting either way.
+	dec := decide.Decide(cfg, prev, status)
+	store.RecordSeen(key, status)
+	defer store.Persist()
+
+	if cfg.Debug {
+		logf("DEBUG raw event: %s", os.Getenv("HERDR_PLUGIN_EVENT_JSON"))
+		logf("DEBUG %s: prev=%q cur=%q -> notify=%t kind=%q", key, prev, status, dec.Notify, dec.Kind)
+	}
+
+	if !dec.Notify {
+		return 0
+	}
+	if !store.AllowNotify(key, dec.Kind) {
+		logf("debounced %q for %s", dec.Kind, key)
 		return 0
 	}
 
-	if err := client.Publish(render.EventMessage(cfg, ev)); err != nil {
+	if err := client.Publish(render.EventMessage(cfg, ev, dec.Kind)); err != nil {
 		// A transient ntfy outage must not break herdr; log and move on.
 		logf("publish failed: %v", err)
 		return 0
 	}
-	store.Record(ev.PaneKey(), status)
-	logf("notified %q for %s", status, ev.PaneKey())
+	store.RecordNotify(key, dec.Kind)
+	logf("notified %q for %s", dec.Kind, key)
 	return 0
 }

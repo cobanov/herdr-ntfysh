@@ -33,28 +33,29 @@ var statusWord = map[string]string{
 	"idle":    "idle",
 }
 
-// EventMessage builds the notification for a triggering agent-status event.
-func EventMessage(cfg *config.Config, ev *event.Event) ntfy.Message {
-	status := ev.Status()
+// EventMessage builds the notification for a triggering event. kind is the
+// decided notification category ("done", "blocked", "working", "idle"), which
+// may differ from the raw agent status — e.g. a working->idle transition is
+// surfaced as "done".
+func EventMessage(cfg *config.Config, ev *event.Event, kind string) ntfy.Message {
 	agent := ev.Agent()
 
 	// ASCII separator on purpose: X-Title is an HTTP header and must stay
 	// ISO-8859-1/ASCII clean, or non-ASCII bytes get mojibaked by proxies.
-	title := fmt.Sprintf("%s - %s", agent, wordFor(status))
+	title := fmt.Sprintf("%s - %s", agent, wordFor(kind))
 	if cfg.TitlePrefix != "" {
 		title = cfg.TitlePrefix + " " + title
 	}
 
-	msg := ntfy.Message{
+	return ntfy.Message{
 		Title:    title,
-		Body:     buildBody(ev, status),
-		Tags:     buildTags(cfg, status),
-		Priority: cfg.PriorityFor(status),
+		Body:     buildBody(ev, kind),
+		Tags:     buildTags(cfg, kind),
+		Priority: cfg.PriorityFor(kind),
 		Click:    cfg.Click,
 		Icon:     cfg.Icon,
 		Markdown: cfg.Markdown,
 	}
-	return msg
 }
 
 // TestMessage builds the notification sent by the `--test` action.

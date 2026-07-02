@@ -115,17 +115,25 @@ command = "herdr plugin action invoke cobanov.herdr-ntfysh.test"
 
 ## Behavior
 
-- **Triggers** on herdr's `pane.agent_status_changed` event.
+- **Triggers** on herdr's `pane.agent_status_changed` event, for panes in
+  **every workspace** (the subscription is global — no per-workspace setup).
 - **Notifies** on `done` and `blocked` by default. Change with
   `HERDR_NTFY_NOTIFY_ON` (any of `done,blocked,working,idle`).
+- **How "done" is detected.** herdr rolls a pane up to
+  `idle`/`working`/`blocked`/`done`. It usually emits `done` directly when a
+  turn finishes, but some completions surface only as a `working → idle`
+  transition. This plugin treats **both** as "done", so a finished agent
+  reliably pings you.
 - **Priority** defaults to `high` for `blocked`, `default` for `done`.
   Override per status (`HERDR_NTFY_PRIORITY_BLOCKED`, etc.).
-- **Debounces** an identical status for the same pane within
+- **Debounces** the same notification kind for the same pane within
   `HERDR_NTFY_DEDUP_WINDOW` seconds (default 10) so a flapping agent can't spam
   you. State lives in herdr's plugin state dir.
 - **Fails safe**: a bad config or an unreachable ntfy server is logged to
   stderr (`herdr plugin log list --plugin cobanov.herdr-ntfysh`) and the
   process exits cleanly, never disrupting herdr.
+- **No notifications yet?** Set `HERDR_NTFY_DEBUG=1` in your `.env` to log the
+  raw event payload and the notify decision to the plugin log.
 
 ## Troubleshooting
 

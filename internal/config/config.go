@@ -70,6 +70,9 @@ type Config struct {
 
 	// StateDir is where debounce state is persisted (HERDR_PLUGIN_STATE_DIR).
 	StateDir string
+
+	// Debug logs the raw event payload and decision to stderr.
+	Debug bool
 }
 
 // Load resolves configuration from the environment and .env file.
@@ -100,6 +103,7 @@ func Load() (*Config, error) {
 		TitlePrefix: get("HERDR_NTFY_TITLE_PREFIX"),
 		Markdown:    parseBool(get("HERDR_NTFY_MARKDOWN"), false),
 		StateDir:    os.Getenv("HERDR_PLUGIN_STATE_DIR"),
+		Debug:       parseBool(get("HERDR_NTFY_DEBUG"), false),
 	}
 
 	cfg.NotifyOn = parseStatuses(get("HERDR_NTFY_NOTIFY_ON"), []string{"done", "blocked"})

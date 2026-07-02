@@ -17,8 +17,8 @@ func baseCfg() *config.Config {
 }
 
 func TestEventMessageDone(t *testing.T) {
-	ev, _ := event.FromJSON(`{"data":{"agent_status":"done","display_agent":"Claude","workspace":"api","tab":"main","state_labels":{"task":"tests green"}}}`)
-	m := EventMessage(baseCfg(), ev)
+	ev, _ := event.FromJSON(`{"data":{"agent_status":"idle","display_agent":"Claude","workspace_id":"api","tab_id":"main","state_labels":{"task":"tests green"}}}`)
+	m := EventMessage(baseCfg(), ev, "done")
 
 	if m.Title != "Claude - done" {
 		t.Errorf("title = %q", m.Title)
@@ -39,7 +39,7 @@ func TestEventMessageDone(t *testing.T) {
 
 func TestEventMessageBlocked(t *testing.T) {
 	ev, _ := event.FromJSON(`{"data":{"agent_status":"blocked","display_agent":"Codex","state_labels":{"error":"needs your approval"}}}`)
-	m := EventMessage(baseCfg(), ev)
+	m := EventMessage(baseCfg(), ev, "blocked")
 
 	if m.Title != "Codex - needs input" {
 		t.Errorf("title = %q", m.Title)
@@ -59,8 +59,8 @@ func TestTitlePrefixAndExtraTags(t *testing.T) {
 	cfg := baseCfg()
 	cfg.TitlePrefix = "[herdr]"
 	cfg.TagsExtra = []string{"computer"}
-	ev, _ := event.FromJSON(`{"data":{"agent_status":"done","display_agent":"Claude"}}`)
-	m := EventMessage(cfg, ev)
+	ev, _ := event.FromJSON(`{"data":{"agent_status":"idle","display_agent":"Claude"}}`)
+	m := EventMessage(cfg, ev, "done")
 
 	if !strings.HasPrefix(m.Title, "[herdr] ") {
 		t.Errorf("title prefix missing: %q", m.Title)
@@ -72,8 +72,8 @@ func TestTitlePrefixAndExtraTags(t *testing.T) {
 
 func TestFallbackDetail(t *testing.T) {
 	// No labels, no custom status -> generic sentence per status.
-	ev, _ := event.FromJSON(`{"data":{"agent_status":"done","display_agent":"Claude"}}`)
-	m := EventMessage(baseCfg(), ev)
+	ev, _ := event.FromJSON(`{"data":{"agent_status":"idle","display_agent":"Claude"}}`)
+	m := EventMessage(baseCfg(), ev, "done")
 	if !strings.Contains(m.Body, "finished its task") {
 		t.Errorf("expected generic done detail: %q", m.Body)
 	}

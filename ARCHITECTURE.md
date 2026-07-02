@@ -37,13 +37,37 @@ error.
 main.go                 orchestration + the fail-safe exit-code policy
 internal/config         resolve + validate settings (env > .env file)
 internal/event          parse HERDR_PLUGIN_EVENT_JSON, with HERDR_* fallbacks
-internal/render         event + config  ->  ntfy.Message (title/body/tags)
+internal/decide         map a status transition -> notify decision + kind
+internal/render         event + kind + config -> ntfy.Message (title/body/tags)
 internal/ntfy           dependency-free HTTP client (auth + custom TLS)
-internal/dedup          per-pane windowed debounce, persisted as JSON
+internal/dedup          per-pane last-seen + debounce state, persisted as JSON
 ```
 
-Dependency direction is acyclic: `render` and `ntfy` depend on `config`;
-`main` depends on everything. Nothing depends on `main`.
+Dependency direction is acyclic: `decide`, `render`, `ntfy` and `dedup`
+depend on `config`; `main` depends on everything. Nothing depends on `main`.
+
+## Status model
+
+herdr rolls each pane up to `idle | working | blocked | done | unknown` and
+delivers transitions via `pane.agent_status_changed`. The observed payload is:
+
+```json
+{"event":"pane_agent_status_changed",
+ "data":{"pane_id":"w5:p2","workspace_id":"w5","agent_status":"idle","agent":"claude"}}
+```
+
+Two things make the "done" signal non-trivial, both handled in `internal/decide`:
+
+- herdr **usually** emits `done` directly when a turn finishes, but **some**
+  completions arrive only as a `working → idle` transition. Both are mapped to
+  the `done` kind, so completion is caught either way.
+- Detecting the `working → idle` case requires the previous status, which is
+  why `internal/dedup` persists the last-seen status per pane across the
+  short-lived invocations.
+
+The event's `agent_status` is the raw status; the notification *kind* ("done",
+"blocked", "working", "idle") is what `decide` produces and what `render` uses
+for wording, tags and priority — they are deliberately separate.
 
 ## Configuration resolution
 
@@ -66,14 +90,18 @@ differ, so every field is optional; missing location fields fall back to the
 The fields consumed are:
 
 ```
-data.agent_status         idle | working | blocked | done
-data.display_agent        friendly agent name (falls back to data.agent)
-data.workspace, data.tab  location breadcrumb
-data.pane_id              stable key for debounce bookkeeping
-data.custom_status        free-form status text
-data.state_labels.task    detail preferred for done/working
-data.state_labels.error   detail preferred for blocked
+data.agent_status              idle | working | blocked | done | unknown
+data.agent / data.display_agent friendly agent name (display_agent preferred)
+data.workspace_id / data.tab_id location breadcrumb (workspace/tab also read)
+data.pane_id                   stable key for state + debounce bookkeeping
+data.custom_status             free-form status text, if present
+data.state_labels.task         detail preferred for done/working, if present
+data.state_labels.error        detail preferred for blocked, if present
 ```
+
+The core payload carries `agent_status`, `agent`, `pane_id` and
+`workspace_id`; the richer fields (`display_agent`, `custom_status`,
+`state_labels`) are read opportunistically and simply absent on lean events.
 
 ## ntfy protocol choices
 
@@ -92,8 +120,9 @@ data.state_labels.error   detail preferred for blocked
 
 herdr can re-emit an event, and an agent can flap between states, so a single
 logical "done" could otherwise become a burst of pushes. `internal/dedup`
-records the last-notified `{status, timestamp}` per pane key in a small JSON
-file under `HERDR_PLUGIN_STATE_DIR`, and suppresses an identical status within
-the configured window. It writes via a temp-file rename so a crash can't leave
-truncated state. When no state dir is available (e.g. a standalone `--test`),
-debouncing is disabled rather than failing.
+persists a small JSON map per pane under `HERDR_PLUGIN_STATE_DIR` holding both
+the last-seen status (for `working → idle` detection) and the last-notified
+kind + timestamp. A notification of the same kind for the same pane within the
+configured window is suppressed. It writes via a temp-file rename so a crash
+can't leave truncated state. When no state dir is available (e.g. a standalone
+`--test`), state is in-memory only for that run.

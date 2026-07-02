@@ -5,7 +5,7 @@
 .env
 
 # Local runtime state
-last-status.json
+panes.json
 *.tmp
 
 # OS cruft

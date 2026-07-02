@@ -26,7 +26,9 @@ type data struct {
 	Agent        string      `json:"agent"`
 	DisplayAgent string      `json:"display_agent"`
 	Workspace    string      `json:"workspace"`
+	WorkspaceID  string      `json:"workspace_id"`
 	Tab          string      `json:"tab"`
+	TabID        string      `json:"tab_id"`
 	PaneID       string      `json:"pane_id"`
 	CustomStatus string      `json:"custom_status"`
 	Title        string      `json:"title"`
@@ -74,14 +76,15 @@ func (e *Event) Agent() string {
 	return firstNonEmpty(e.p.Data.DisplayAgent, e.p.Data.Agent, "agent")
 }
 
-// Workspace falls back to the HERDR_WORKSPACE_ID runtime variable.
+// Workspace prefers the payload's workspace/workspace_id, then the
+// HERDR_WORKSPACE_ID runtime variable.
 func (e *Event) Workspace() string {
-	return firstNonEmpty(e.p.Data.Workspace, os.Getenv("HERDR_WORKSPACE_ID"))
+	return firstNonEmpty(e.p.Data.Workspace, e.p.Data.WorkspaceID, os.Getenv("HERDR_WORKSPACE_ID"))
 }
 
-// Tab falls back to the HERDR_TAB_ID runtime variable.
+// Tab prefers the payload's tab/tab_id, then the HERDR_TAB_ID runtime variable.
 func (e *Event) Tab() string {
-	return firstNonEmpty(e.p.Data.Tab, os.Getenv("HERDR_TAB_ID"))
+	return firstNonEmpty(e.p.Data.Tab, e.p.Data.TabID, os.Getenv("HERDR_TAB_ID"))
 }
 
 // PaneID falls back to the HERDR_PANE_ID runtime variable.
