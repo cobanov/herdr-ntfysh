@@ -6,15 +6,11 @@ agent finishes its work or blocks waiting for your input.
 You start a long task, switch to something else, and your phone (or desktop)
 pings the moment the agent needs you — no more babysitting the sidebar.
 
-```
-🟢  Claude - done            [herd]
-    tests green
-    📍 api › main
+<p align="center">
+  <img src="assets/preview.svg" alt="ntfy notifications: 'Claude - done' and 'Codex - needs input'" width="620">
+</p>
 
-🔴  Codex - needs input      [herd]
-    awaiting approval to run migration
-    📍 web › deploy
-```
+<p align="center"><sub>Illustration of the pushes for a finished and a blocked agent.</sub></p>
 
 ## Why another ntfy plugin?
 
